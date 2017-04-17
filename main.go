@@ -12,10 +12,10 @@ import (
 )
 
 const (
-	key     = "heximage"
-	width   = 1000
-	height  = 1000
-	quality = 100
+	key    = "heximage"
+	width  = 1000
+	height = 1000
+	bits   = width * height * 4
 )
 
 // SetColour sets the colour on a pixel of the image.
@@ -31,18 +31,32 @@ func SetColour(conn redis.Conn, xs, ys, colours string) error {
 		return errors.Wrap(err, "can't parse y")
 	}
 
-	colour, err := strconv.ParseUint(colours, 10, 8)
+	if x > width || y > height {
+		return errors.New("invalid pixel location supplied")
+	}
+
+	colour, err := strconv.ParseUint(colours, 16, 32)
 	if err != nil {
 		return errors.Wrap(err, "can't parse color")
 	}
 
-	offset := (width*(y-1) + (x - 1)) * 8
+	if err := SendSet(conn, uint32(x), uint32(y), uint32(colour)); err != nil {
+		return err
+	}
 
-	if _, err := conn.Do("BITFIELD", key, "SET", "u8", offset, colour); err != nil {
+	if err := conn.Flush(); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+// SendSet sends the set comment but does not flush it.
+func SendSet(conn redis.Conn, x, y, colour uint32) error {
+
+	offset := (width*(y-1) + (x - 1)) * 32
+
+	return conn.Send("BITFIELD", key, "SET", "u32", offset, colour)
 }
 
 // GetImage returns an image.
@@ -52,13 +66,13 @@ func GetImage(conn redis.Conn) error {
 		return errors.Wrap(err, "can't get the image bytes")
 	}
 
-	if len(data) != width*height {
-		newData := make([]uint8, width*height)
+	if len(data) != bits {
+		newData := make([]uint8, bits)
 		copy(newData, data)
 		data = newData
 	}
 
-	img := image.NewRGBA(image.Rect(0, 0, width/2, height/2))
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
 
 	img.Pix = data
 
@@ -90,17 +104,43 @@ func InitImage(conn redis.Conn) error {
 		return errors.Wrap(err, "can't execute the del command")
 	}
 
-	// offset := (width*(height-1) + (width - 1)) * 8
+	if err := SendSet(conn, width, height, 0); err != nil {
+		return err
+	}
 
-	// if _, err := conn.Do("BITFIELD", key, "SET", "u8", offset, "0"); err != nil {
-	// 	return err
-	// }
+	if err := conn.Flush(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// TestImage prints a test pattern onto the image.
+func TestImage(conn redis.Conn) error {
+	i := 0
+	colours := []uint32{0xFF0F00FF, 0xF99F00FF, 0xF0FF00FF}
+	coloursLen := len(colours)
+
+	for y := uint32(1); y <= height; y++ {
+		for x := uint32(1); x <= width; x++ {
+			colour := colours[i]
+			i = (i + 1) % coloursLen
+
+			if err := SendSet(conn, x, y, colour); err != nil {
+				return err
+			}
+		}
+	}
+
+	if err := conn.Flush(); err != nil {
+		return err
+	}
 
 	return nil
 }
 
 func usage() {
-	fmt.Println("heximage [init|set|get|clear]")
+	fmt.Println("heximage [init|set|get|clear|test]")
 	os.Exit(1)
 }
 
@@ -138,6 +178,11 @@ func main() {
 	case "get":
 		if err := GetImage(conn); err != nil {
 			fmt.Printf("Can't get the image: %s\n", err.Error())
+			os.Exit(1)
+		}
+	case "test":
+		if err := TestImage(conn); err != nil {
+			fmt.Printf("Can't set the test pattern: %s\n", err.Error())
 			os.Exit(1)
 		}
 	case "clear":
