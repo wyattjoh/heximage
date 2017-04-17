@@ -164,18 +164,18 @@ func StartServer(pool *redis.Pool) error {
 			X, Y, Colour string
 		}
 		if err := json.NewDecoder(r.Body).Decode(&pl); err != nil {
-			log.Printf("%s /api/place/draw %d - %s", r.Method, http.StatusBadRequest, time.Since(start))
+			log.Printf("POST /api/place/draw %d - %s", http.StatusBadRequest, time.Since(start))
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
 		}
 
 		if err := SetColour(conn, pl.X, pl.Y, pl.Colour); err != nil {
-			log.Printf("%s /api/place/draw %d - %s", r.Method, http.StatusInternalServerError, time.Since(start))
+			log.Printf("POST /api/place/draw %d - %s", http.StatusInternalServerError, time.Since(start))
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
 		}
 
-		log.Printf("%s /api/place/draw %d - %s", r.Method, http.StatusOK, time.Since(start))
+		log.Printf("POST /api/place/draw %d - %s", http.StatusOK, time.Since(start))
 		w.WriteHeader(http.StatusCreated)
 	})
 
@@ -207,12 +207,12 @@ func StartServer(pool *redis.Pool) error {
 		}
 
 		if err := enc.Encode(w, img); err != nil {
-			log.Printf("%s /api/place/board-bitmap %d - %s", r.Method, http.StatusInternalServerError, time.Since(start))
+			log.Printf("GET /api/place/board-bitmap %d - %s", http.StatusInternalServerError, time.Since(start))
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		log.Printf("%s /api/place/board-bitmap %d - %s", r.Method, http.StatusOK, time.Since(start))
+		log.Printf("GET /api/place/board-bitmap %d - %s", http.StatusOK, time.Since(start))
 	})
 
 	log.Printf("Now listening on 127.0.0.1:8080")
