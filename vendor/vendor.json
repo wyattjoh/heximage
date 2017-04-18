@@ -3,6 +3,12 @@
 	"ignore": "test",
 	"package": [
 		{
+			"checksumSHA1": "1OmwbWaOG0jEW8FJ5dqnpbhm1ZY=",
+			"path": "github.com/disintegration/imaging",
+			"revision": "243d2d8673c1225a6afceeb9b3b4423d485dc8df",
+			"revisionTime": "2017-01-02T19:04:32Z"
+		},
+		{
 			"checksumSHA1": "2UmMbNHc8FBr98mJFN1k8ISOIHk=",
 			"path": "github.com/garyburd/redigo/internal",
 			"revision": "b8dc90050f24c1a73a52f107f3f575be67b21b7c",
@@ -25,6 +31,24 @@
 			"path": "github.com/urfave/negroni",
 			"revision": "c0db5feaa33826cd5117930c8f4ee5c0f565eec6",
 			"revisionTime": "2017-02-26T00:53:33Z"
+		},
+		{
+			"checksumSHA1": "UD/pejajPyS7WaWVXq2NU1eK4Ic=",
+			"path": "golang.org/x/image/bmp",
+			"revision": "05f0a469d9f7c77399b53a6bab80983eb856b52e",
+			"revisionTime": "2017-02-04T03:43:53Z"
+		},
+		{
+			"checksumSHA1": "0ozDsaLc0goE9CvU2E/J9Md3KOQ=",
+			"path": "golang.org/x/image/tiff",
+			"revision": "05f0a469d9f7c77399b53a6bab80983eb856b52e",
+			"revisionTime": "2017-02-04T03:43:53Z"
+		},
+		{
+			"checksumSHA1": "Xnm81x3lWS6xRxSthJuLt+fpfi0=",
+			"path": "golang.org/x/image/tiff/lzw",
+			"revision": "05f0a469d9f7c77399b53a6bab80983eb856b52e",
+			"revisionTime": "2017-02-04T03:43:53Z"
 		}
 	],
 	"rootPath": "github.com/wyattjoh/heximage"

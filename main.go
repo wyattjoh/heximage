@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/disintegration/imaging"
 	"github.com/garyburd/redigo/redis"
 	"github.com/pkg/errors"
 	"github.com/urfave/negroni"
@@ -22,8 +23,8 @@ const (
 	timeout = 30 * time.Second
 
 	key    = "heximage"
-	width  = 5
-	height = 5
+	width  = 50
+	height = 50
 	bits   = width * height * 4
 )
 
@@ -203,6 +204,13 @@ func HandleGetBoardBitmap(pool *redis.Pool) http.HandlerFunc {
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
+		}
+
+		widthParam := r.URL.Query().Get("w")
+		if widthParam != "" {
+			if widthValue, err := strconv.Atoi(widthParam); err == nil {
+				img = imaging.Resize(img, widthValue, 0, imaging.NearestNeighbor)
+			}
 		}
 
 		w.Header().Set("Content-Type", "image/png")
