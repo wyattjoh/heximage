@@ -1,6 +1,9 @@
 <html>
   <head>
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/spectrum/1.8.0/spectrum.min.js" integrity="sha256-ZdnRjhC/+YiBbXTHIuJdpf7u6Jh5D2wD5y0SNRWDREQ=" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/reconnecting-websocket/1.0.0/reconnecting-websocket.min.js" integrity="sha256-A4JwlcDvqO4JXpvEtvWY1RH8JAEMu5W21wP8GUXLUNs=" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/spectrum/1.8.0/spectrum.min.css" integrity="sha256-f83N12sqX/GO43Y7vXNt9MjrHkPc4yi9Uq9cLy1wGIU=" crossorigin="anonymous" />
     <style type="text/css">
         body {
           background: #EEE;
@@ -50,9 +53,11 @@
         </div>
       </div>
     </div>
+    <input id="colour" type="text" />
     <script type="application/javascript">
       const width = 50, height = 50;
 
+      let palateEl = document.getElementById('colour');
       let containerEl = document.getElementById('container');
       let cameraEl = document.getElementById('camera');
       let el = document.getElementById('canvas');
@@ -70,7 +75,7 @@
         ctx.putImageData(e, 0, 0);
       }
 
-      function loadBitmap() {
+       function loadBitmap() {
         fetch('http://localhost:8080/api/place/board-bitmap')
           .then((res) => res.arrayBuffer())
           .then((data) => {
@@ -81,15 +86,9 @@
           });
       }
 
-      function getContainerSize() {
-        let rect = containerEl.getBoundingClientRect();
-
-        return rect;
-      }
-
       let zoom = 4, panX = 0, panY = 0;
 
-      function i(e) {
+      function getCoordinatesFromEvent(e) {
         let r = {
           x: parseInt(e.clientX, 10) + window.scrollX,
           y: parseInt(e.clientY, 10) + window.scrollY
@@ -100,8 +99,8 @@
 
         let c = containerEl.getBoundingClientRect();
         return {
-            x: Math.round((r.x - s) / zoom + width / 2 - c.width / (2 * zoom) - panX),
-            y: Math.round((r.y - o) / zoom + height / 2 - c.height / (2 * zoom) - panY)
+          x: Math.round((r.x - s) / zoom + width / 2 - c.width / (2 * zoom) - panX),
+          y: Math.round((r.y - o) / zoom + height / 2 - c.height / (2 * zoom) - panY)
         };
       }
 
@@ -122,14 +121,29 @@
         return result;
       }
 
-      let PALATE = [0xff, 0x00, 0xff, 0xff];
+      let pickingColour = false;
+      let PALATE = [0x00, 0x00, 0x00, 0xff];
+      $(palateEl).spectrum({
+        show: () => {
+          pickingColour = true;
+        },
+        hide: () => {
+          pickingColour = false;
+        },
+        change: (colour) => {
+          let {r, g, b, a} = colour.toRgb();
+
+          PALATE[0] = r;
+          PALATE[1] = g;
+          PALATE[2] = b;
+          PALATE[3] = Math.round(a * 0xff);
+
+          console.log({r,g,b,a}, PALATE);
+        }
+      });
 
       cameraEl.addEventListener('contextmenu', (e) => {
         e.preventDefault();
-
-        PALATE[0] = PALATE[0] ? 0x00 : 0xff;
-        PALATE[1] = PALATE[1] ? 0x00 : 0xff;
-        PALATE[2] = PALATE[2] ? 0x00 : 0xff;
       });
 
       function getOffset(x, y) {
@@ -143,41 +157,45 @@
       }
 
       // Create WebSocket connection.
-      const socket = new WebSocket('ws://localhost:8080/api/place/live');
+      const socket = new ReconnectingWebSocket('ws://localhost:8080/api/place/live');
 
       // Connection opened
       socket.addEventListener('open', (event) => {
-
+        // TODO: enable editing now that we've opened the websocket connection.
       });
 
       cameraEl.addEventListener('mouseup', (e) => {
-        // if this was the contextmenu, exit.
+
+        // If we're picking a colour, don't draw anything.
+        if (pickingColour) {
+          return;
+        }
+
+        // If this was the contextmenu, exit.
         if (e.which === 3) {
           return;
         }
 
-        const {x, y} = i(e);
+        const {x, y} = getCoordinatesFromEvent(e);
 
-        console.log(x, e.offsetX, y, e.offsetY);
-
+        // Compute th eoffset in the array.
         const offset = getOffset(x, y);
 
-        const colour = array.slice(offset, offset + 3);
+        // Get the current colour.
+        const colour = array.slice(offset, offset + 4);
 
-        console.log(`(${x},${y}) -> (${offset}) -> (${colour})`);
+        // If the current colour is already there, don't bother writing it...
+        if (colour.length === PALATE.length && colour.every((v, i) => v === PALATE[i])) {
+          return;
+        }
 
-        let body = JSON.stringify({
-          X: `${x}`, Y: `${y}`, Colour: toHexString(PALATE)
-        });
-
-        // fetch('http://localhost:8080/api/place/draw', {
-        //   method: 'POST',
-        //   body
-        // });
-
+        // This is a new colour! Draw it locally and push it up the websocket.
         drawPixel(x, y, PALATE);
-
-        socket.send(body);
+        socket.send(JSON.stringify({
+          X: `${x}`,
+          Y: `${y}`,
+          Colour: toHexString(PALATE)
+        }));
       }, false);
 
       loadBitmap();

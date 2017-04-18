@@ -155,7 +155,7 @@ func usage() {
 
 // StartServer runs an http server capable of serving requests for the image
 // service.
-func StartServer(pool *redis.Pool, conn redis.Conn) error {
+func StartServer(addr string, pool *redis.Pool, conn redis.Conn) error {
 	mux := http.NewServeMux()
 
 	mux.Handle("/api/place/live", HandleLiveConnection(pool, conn))
@@ -169,8 +169,8 @@ func StartServer(pool *redis.Pool, conn redis.Conn) error {
 	}))
 	n.UseHandler(mux)
 
-	log.Printf("Now listening on 127.0.0.1:8080")
-	return http.ListenAndServe("127.0.0.1:8080", n)
+	log.Printf("Now listening on %s", addr)
+	return http.ListenAndServe(addr, n)
 }
 
 // HandleLiveConnection brokers the websocket connection with redis.
@@ -412,6 +412,16 @@ func main() {
 			Name:  "debug",
 			Usage: "enables debug mode",
 		},
+		cli.StringFlag{
+			Name:  "redis-url",
+			Usage: "url to the redis instance",
+			Value: "redis://localhost:6379",
+		},
+		cli.IntFlag{
+			Name:  "redis-max-clients",
+			Usage: "maximum amount of clients that can connect to the redis instance",
+			Value: 0,
+		},
 	}
 	app.Before = func(c *cli.Context) error {
 		if c.GlobalBool("debug") {
@@ -419,7 +429,7 @@ func main() {
 		}
 
 		var err error
-		pool, err = ConnectRedis("redis://localhost:6379", 10)
+		pool, err = ConnectRedis(c.GlobalString("redis-url"), c.GlobalInt("redis-max-clients"))
 		if err != nil {
 			return cli.NewExitError(errors.Wrap(err, "can't connect to redis"), 1)
 		}
@@ -443,8 +453,15 @@ func main() {
 		{
 			Name:  "server",
 			Usage: "serves the heximage server",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  "listen-addr",
+					Usage: "address for the server to listen on",
+					Value: "127.0.0.1:8000",
+				},
+			},
 			Action: func(c *cli.Context) error {
-				if err := StartServer(pool, conn); err != nil {
+				if err := StartServer(c.String("listen-addr"), pool, conn); err != nil {
 					return cli.NewExitError(errors.Wrap(err, "can't run the server"), 1)
 				}
 
@@ -463,9 +480,8 @@ func main() {
 			},
 		},
 		{
-			Name:      "set",
-			UsageText: "",
-			Usage:     "sets a pixel's colour on the image canvas",
+			Name:  "set",
+			Usage: "sets a pixel's colour on the image canvas",
 			Action: func(c *cli.Context) error {
 				if c.NArg() != 3 {
 					return cli.NewExitError("missing x, y, or colour", 1)
