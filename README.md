@@ -40,6 +40,9 @@ OPTIONS:
 
 For an example of the application in action, visit the `example` directory.
 
+All other commands can be explored by looking through the usage information
+available via `--help` on each command and subcommand.
+
 ## License
 
 MIT
