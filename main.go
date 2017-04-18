@@ -1,19 +1,25 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"image"
 	"image/png"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"strconv"
 	"time"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/disintegration/imaging"
 	"github.com/garyburd/redigo/redis"
+	"github.com/gorilla/websocket"
 	"github.com/pkg/errors"
+	"github.com/rs/cors"
+	"github.com/urfave/cli"
 	"github.com/urfave/negroni"
 )
 
@@ -22,10 +28,11 @@ const (
 	// browser from re-requesting the image.
 	timeout = 30 * time.Second
 
-	key    = "heximage"
-	width  = 50
-	height = 50
-	bits   = width * height * 4
+	key        = "heximage"
+	updatesKey = key + ":updates"
+	width      = 50
+	height     = 50
+	bits       = width * height * 4
 )
 
 // SetColour sets the colour on a pixel of the image.
@@ -148,17 +155,146 @@ func usage() {
 
 // StartServer runs an http server capable of serving requests for the image
 // service.
-func StartServer(pool *redis.Pool) error {
+func StartServer(pool *redis.Pool, conn redis.Conn) error {
 	mux := http.NewServeMux()
 
+	mux.Handle("/api/place/live", HandleLiveConnection(pool, conn))
 	mux.Handle("/api/place/draw", HandleCreatePixel(pool))
+	mux.Handle("/api/place/board", HandleGetBoard(pool))
 	mux.Handle("/api/place/board-bitmap", HandleGetBoardBitmap(pool))
 
 	n := negroni.Classic() // Includes some default middlewares
+	n.Use(cors.New(cors.Options{
+		AllowedOrigins: []string{"http://localhost:8000"},
+	}))
 	n.UseHandler(mux)
 
 	log.Printf("Now listening on 127.0.0.1:8080")
 	return http.ListenAndServe("127.0.0.1:8080", n)
+}
+
+// HandleLiveConnection brokers the websocket connection with redis.
+func HandleLiveConnection(pool *redis.Pool, psconn redis.Conn) http.HandlerFunc {
+	var upgrader = websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
+	} // use default options
+
+	messages := make(chan []byte)
+	newClients := make(chan *websocket.Conn)
+	closingClients := make(chan *websocket.Conn)
+
+	// Create the pubsub connection and subscribe.
+	psc := redis.PubSubConn{Conn: psconn}
+
+	psc.Subscribe(updatesKey)
+
+	// This routine will keep track of new clients connecting so we know if we
+	// need to send them data
+	go func() {
+		clients := make(map[*websocket.Conn]bool)
+
+		for {
+			select {
+			case con := <-newClients:
+
+				logrus.Debugf("CML: A new client has connected")
+				clients[con] = true
+
+			case msg := <-messages:
+
+				logrus.Debugf("CML: A new message needs to be sent")
+				for con := range clients {
+					if err := con.WriteMessage(websocket.TextMessage, msg); err != nil {
+						logrus.Debugf("CML: Writing to a client failed: %s", err.Error())
+						delete(clients, con)
+						continue
+					}
+
+					logrus.Debugf("CML: Sent message")
+				}
+
+			case con := <-closingClients:
+
+				logrus.Debugf("CML: A client has disconnected.")
+				delete(clients, con)
+
+			}
+		}
+	}()
+
+	go func() {
+
+		for {
+			switch n := psc.Receive().(type) {
+			case redis.Message:
+
+				// A new message from Redis, send it to all connected clients.
+				logrus.Debugf("RD: New Message: %s", string(n.Data))
+				messages <- n.Data
+
+			case redis.Subscription:
+
+				logrus.Debugf("RD: Subscription: %d", n.Count)
+
+			case error:
+
+				// An error was encoutnered while managing the pubsub connection.
+				logrus.Debugf("RD: Error: %s", n.Error())
+				return
+			}
+		}
+	}()
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		c, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer func() {
+			closingClients <- c
+			c.Close()
+		}()
+
+		newClients <- c
+
+		for {
+			_, message, err := c.ReadMessage()
+			if err != nil {
+				break
+			}
+
+			logrus.Debugf("WS: New Message: %s", string(message))
+
+			var buf = bytes.NewBuffer(message)
+
+			var pl struct {
+				X, Y, Colour string
+			}
+			if err := json.NewDecoder(buf).Decode(&pl); err != nil {
+				logrus.Debugf("WS: Error: %s", err.Error())
+				continue
+			}
+
+			conn := pool.Get()
+
+			if err := SetColour(conn, pl.X, pl.Y, pl.Colour); err != nil {
+				logrus.Debugf("WS: Error: %s", err.Error())
+				conn.Close()
+				continue
+			}
+
+			if _, err := conn.Do("PUBLISH", updatesKey, string(message)); err != nil {
+				logrus.Debugf("WS: Error: %s", err.Error())
+				conn.Close()
+				continue
+			}
+
+			conn.Close()
+		}
+	}
 }
 
 // HandleCreatePixel handles creating pixels on the image.
@@ -189,8 +325,8 @@ func HandleCreatePixel(pool *redis.Pool) http.HandlerFunc {
 	}
 }
 
-// HandleGetBoardBitmap handles serving the board as a png image.
-func HandleGetBoardBitmap(pool *redis.Pool) http.HandlerFunc {
+// HandleGetBoard handles serving the board as a png image.
+func HandleGetBoard(pool *redis.Pool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {
 			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
@@ -228,72 +364,168 @@ func HandleGetBoardBitmap(pool *redis.Pool) http.HandlerFunc {
 	}
 }
 
-func main() {
-	if len(os.Args) < 2 {
-		usage()
-	}
-
-	pool, err := ConnectRedis("redis://localhost:6379", 10)
-	if err != nil {
-		fmt.Printf("Can't connect to redis: %s\n", err.Error())
-		os.Exit(1)
-	}
-	defer pool.Close()
-
-	switch os.Args[1] {
-	case "server":
-		if err := StartServer(pool); err != nil {
-			fmt.Printf("Can't run the server: %s\n", err.Error())
-			os.Exit(1)
-		}
-	}
-
-	conn := pool.Get()
-	defer conn.Close()
-
-	switch os.Args[1] {
-	case "init":
-		if err := InitImage(conn); err != nil {
-			fmt.Printf("Can't init the image: %s\n", err.Error())
-			os.Exit(1)
-		}
-	case "set":
-		if len(os.Args) != 5 {
-			fmt.Println("heximage set <x> <y> <colour>")
-			os.Exit(1)
+// HandleGetBoardBitmap handles serving the board as a png image.
+func HandleGetBoardBitmap(pool *redis.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" {
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			return
 		}
 
-		if err := SetColour(conn, os.Args[2], os.Args[3], os.Args[4]); err != nil {
-			fmt.Printf("Can't set the colour: %s\n", err.Error())
-			os.Exit(1)
-		}
-	case "get":
+		conn := pool.Get()
+		defer conn.Close()
+
 		img, err := GetImage(conn)
 		if err != nil {
-			fmt.Printf("Can't get the image: %s\n", err.Error())
-			os.Exit(1)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
 
-		enc := png.Encoder{
-			CompressionLevel: png.BestCompression,
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", int64(timeout.Seconds())))
+		w.Header().Set("Last-Modified", time.Now().String())
+
+		rimg, ok := img.(*image.RGBA)
+		if !ok {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
 
-		if err := enc.Encode(os.Stdout, img); err != nil {
-			fmt.Printf("Can't encode the image: %s\n", err.Error())
-			os.Exit(1)
-		}
-	case "test":
-		if err := TestImage(conn); err != nil {
-			fmt.Printf("Can't set the test pattern: %s\n", err.Error())
-			os.Exit(1)
-		}
-	case "clear":
-		if err := ClearImage(conn); err != nil {
-			fmt.Printf("Can't clear the image: %s\n", err.Error())
-			os.Exit(1)
-		}
+		buf := bytes.NewBuffer(rimg.Pix)
 
-	default:
-		usage()
+		if _, err := io.Copy(w, buf); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
+}
+
+func main() {
+	var pool *redis.Pool
+	var conn redis.Conn
+
+	app := cli.NewApp()
+	app.Name = "heximage"
+	app.Usage = "mimics reddit.com/r/place experiment"
+	app.Flags = []cli.Flag{
+		cli.BoolFlag{
+			Name:  "debug",
+			Usage: "enables debug mode",
+		},
+	}
+	app.Before = func(c *cli.Context) error {
+		if c.GlobalBool("debug") {
+			logrus.SetLevel(logrus.DebugLevel)
+		}
+
+		var err error
+		pool, err = ConnectRedis("redis://localhost:6379", 10)
+		if err != nil {
+			return cli.NewExitError(errors.Wrap(err, "can't connect to redis"), 1)
+		}
+
+		// Grab our single connection to the pool.
+		conn = pool.Get()
+
+		return nil
+	}
+	app.After = func(c *cli.Context) error {
+
+		// Close this connection.
+		conn.Close()
+
+		// Closes the pool.
+		pool.Close()
+
+		return nil
+	}
+	app.Commands = []cli.Command{
+		{
+			Name:  "server",
+			Usage: "serves the heximage server",
+			Action: func(c *cli.Context) error {
+				if err := StartServer(pool, conn); err != nil {
+					return cli.NewExitError(errors.Wrap(err, "can't run the server"), 1)
+				}
+
+				return nil
+			},
+		},
+		{
+			Name:  "init",
+			Usage: "initializes the image canvas",
+			Action: func(c *cli.Context) error {
+				if err := InitImage(conn); err != nil {
+					return cli.NewExitError(errors.Wrap(err, "can't init the image"), 1)
+				}
+
+				return nil
+			},
+		},
+		{
+			Name:      "set",
+			UsageText: "",
+			Usage:     "sets a pixel's colour on the image canvas",
+			Action: func(c *cli.Context) error {
+				if c.NArg() != 3 {
+					return cli.NewExitError("missing x, y, or colour", 1)
+				}
+
+				args := c.Args()
+				if err := SetColour(conn, args.Get(0), args.Get(1), args.Get(2)); err != nil {
+					return cli.NewExitError(errors.Wrap(err, "can't set the colour"), 1)
+				}
+
+				return nil
+			},
+		},
+		{
+			Name:  "get",
+			Usage: "gets the image and return's an encoded png to the stdout",
+			Action: func(c *cli.Context) error {
+				img, err := GetImage(conn)
+				if err != nil {
+					return cli.NewExitError(errors.Wrap(err, "can't get the image"), 1)
+				}
+
+				enc := png.Encoder{
+					CompressionLevel: png.BestCompression,
+				}
+
+				if err := enc.Encode(os.Stdout, img); err != nil {
+					return cli.NewExitError(errors.Wrap(err, "can't encode the image"), 1)
+				}
+
+				return nil
+			},
+		},
+		{
+			Name:  "clear",
+			Usage: "clears the stored image on the canvas and reinitializes it",
+			Action: func(c *cli.Context) error {
+				if err := ClearImage(conn); err != nil {
+					return cli.NewExitError(errors.Wrap(err, "can't clear the image"), 1)
+				}
+
+				if err := InitImage(conn); err != nil {
+					return cli.NewExitError(errors.Wrap(err, "can't init the image"), 1)
+				}
+
+				return nil
+			},
+		},
+		{
+			Name:  "test",
+			Usage: "prints a test pattern onto the image",
+			Action: func(c *cli.Context) error {
+				if err := TestImage(conn); err != nil {
+					return cli.NewExitError(errors.Wrap(err, "can't set the test pattern"), 1)
+				}
+
+				return nil
+			},
+		},
+	}
+
+	app.Run(os.Args)
 }

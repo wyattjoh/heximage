@@ -1,0 +1,193 @@
+<html>
+  <head>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+    <style type="text/css">
+        body {
+          background: #EEE;
+        }
+
+        #container {
+          align-items: center;
+          background-color: #ddd;
+          display: flex;
+          height: 400px;
+          justify-content: center;
+          overflow: hidden;
+          position: relative;
+          width: auto;
+        }
+
+        #viewer {
+          flex: 0 0 1000px;
+          transform: scale(4, 4);
+          transform-origin: center;
+        }
+
+        #camera {
+          transform: translate(0, 0);
+        }
+
+        canvas {
+          -ms-interpolation-mode: bicubic;
+          image-rendering: -moz-crisp-edges;
+          image-rendering: -webkit-optimize-contrast;
+          image-rendering: crisp-edges;
+          image-rendering: pixelated;
+          background-color: white;
+          cursor: pointer;
+          /*pointer-events: none;*/
+          transform: translate(-1.5px,-1.5px);
+          display: block;
+          margin: 0 auto;
+        }
+    </style>
+  </head>
+  <body>
+    <div id="container">
+      <div id="viewer">
+        <div id="camera">
+          <canvas id="canvas" width="50" height="50"></canvas>
+        </div>
+      </div>
+    </div>
+    <script type="application/javascript">
+      const width = 50, height = 50;
+
+      let containerEl = document.getElementById('container');
+      let cameraEl = document.getElementById('camera');
+      let el = document.getElementById('canvas');
+      let ctx = el.getContext('2d');
+      ctx.mozImageSmoothingEnabled = false;
+      ctx.webkitImageSmoothingEnabled = false;
+      ctx.msImageSmoothingEnabled = false;
+      ctx.imageSmoothingEnabled = false;
+
+      let buffer = new ArrayBuffer(width * height * 4);
+      let array = new Uint8ClampedArray(buffer);
+
+      function updateDisplay() {
+        let e = new ImageData(array, width, height);
+        ctx.putImageData(e, 0, 0);
+      }
+
+      function loadBitmap() {
+        fetch('http://localhost:8080/api/place/board-bitmap')
+          .then((res) => res.arrayBuffer())
+          .then((data) => {
+            buffer = data;
+            array = new Uint8ClampedArray(buffer);
+
+            updateDisplay();
+          });
+      }
+
+      function getContainerSize() {
+        let rect = containerEl.getBoundingClientRect();
+
+        return rect;
+      }
+
+      let zoom = 4, panX = 0, panY = 0;
+
+      function i(e) {
+        let r = {
+          x: parseInt(e.clientX, 10) + window.scrollX,
+          y: parseInt(e.clientY, 10) + window.scrollY
+        };
+
+        let s = e.currentTarget ? e.currentTarget.offsetLeft : 0,
+            o = e.currentTarget ? e.currentTarget.offsetTop : 0;
+
+        let c = containerEl.getBoundingClientRect();
+        return {
+            x: Math.round((r.x - s) / zoom + width / 2 - c.width / (2 * zoom) - panX),
+            y: Math.round((r.y - o) / zoom + height / 2 - c.height / (2 * zoom) - panY)
+        };
+      }
+
+      function toHexString(byteArray) {
+        return byteArray.map(function(byte) {
+          return ('0' + (byte & 0xFF).toString(16)).slice(-2);
+        }).join('')
+      }
+
+      function parseHexString(str) {
+        var result = [];
+        while (str.length >= 2) {
+          result.push(parseInt(str.substring(0, 2), 16));
+
+          str = str.substring(2, str.length);
+        }
+
+        return result;
+      }
+
+      let PALATE = [0xff, 0x00, 0xff, 0xff];
+
+      cameraEl.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+
+        PALATE[0] = PALATE[0] ? 0x00 : 0xff;
+        PALATE[1] = PALATE[1] ? 0x00 : 0xff;
+        PALATE[2] = PALATE[2] ? 0x00 : 0xff;
+      });
+
+      function getOffset(x, y) {
+        return (width*(y-1) + (x-1)) * 4;
+      }
+
+      function drawPixel(x, y, colour) {
+        const offset = getOffset(x, y)
+        array.set(colour, offset);
+        updateDisplay();
+      }
+
+      // Create WebSocket connection.
+      const socket = new WebSocket('ws://localhost:8080/api/place/live');
+
+      // Connection opened
+      socket.addEventListener('open', (event) => {
+
+      });
+
+      cameraEl.addEventListener('mouseup', (e) => {
+        // if this was the contextmenu, exit.
+        if (e.which === 3) {
+          return;
+        }
+
+        const {x, y} = i(e);
+
+        console.log(x, e.offsetX, y, e.offsetY);
+
+        const offset = getOffset(x, y);
+
+        const colour = array.slice(offset, offset + 3);
+
+        console.log(`(${x},${y}) -> (${offset}) -> (${colour})`);
+
+        let body = JSON.stringify({
+          X: `${x}`, Y: `${y}`, Colour: toHexString(PALATE)
+        });
+
+        // fetch('http://localhost:8080/api/place/draw', {
+        //   method: 'POST',
+        //   body
+        // });
+
+        drawPixel(x, y, PALATE);
+
+        socket.send(body);
+      }, false);
+
+      loadBitmap();
+
+      // Listen for messages
+      socket.addEventListener('message', (event) => {
+        const {X, Y, Colour} = JSON.parse(event.data);
+
+        drawPixel(X, Y, parseHexString(Colour));
+      });
+    </script>
+  </body>
+</html>
