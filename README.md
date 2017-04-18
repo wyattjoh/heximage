@@ -1,5 +1,8 @@
 # heximage
 
+[![Go Doc](https://godoc.org/github.com/wyattjoh/heximage?status.svg)](http://godoc.org/github.com/wyattjoh/heximage)
+[![Go Report](https://goreportcard.com/badge/github.com/wyattjoh/heximage)](https://goreportcard.com/report/github.com/wyattjoh/heximage)
+
 This serves as a mimic of the api provided during the reddit.com/r/place
 experiment.
 
