@@ -77,9 +77,13 @@ func main() {
 					Usage: "address for the server to listen on",
 					Value: "127.0.0.1:8080",
 				},
+				cli.StringSliceFlag{
+					Name:  "allowed-cors-origin",
+					Usage: "allow one or many origins to access the api",
+				},
 			},
 			Action: func(c *cli.Context) error {
-				if err := StartServer(c.String("listen-addr"), pool, conn); err != nil {
+				if err := StartServer(c.String("listen-addr"), pool, conn, c.StringSlice("allowed-cors-origin")); err != nil {
 					return cli.NewExitError(errors.Wrap(err, "can't run the server"), 1)
 				}
 

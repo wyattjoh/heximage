@@ -26,7 +26,7 @@ const timeout = 30 * time.Second
 
 // StartServer runs an http server capable of serving requests for the image
 // service.
-func StartServer(addr string, pool *redis.Pool, conn redis.Conn) error {
+func StartServer(addr string, pool *redis.Pool, conn redis.Conn, corsOrigins []string) error {
 	mux := http.NewServeMux()
 
 	mux.Handle("/api/place/live", HandleLiveConnection(pool, conn))
@@ -35,9 +35,13 @@ func StartServer(addr string, pool *redis.Pool, conn redis.Conn) error {
 	mux.Handle("/api/place/board-bitmap", HandleGetBoardBitmap(pool))
 
 	n := negroni.Classic() // Includes some default middlewares
-	n.Use(cors.New(cors.Options{
-		AllowedOrigins: []string{"http://localhost:8000"},
-	}))
+
+	if len(corsOrigins) != 0 {
+		n.Use(cors.New(cors.Options{
+			AllowedOrigins: corsOrigins,
+		}))
+	}
+
 	n.UseHandler(mux)
 
 	log.Printf("Now listening on %s", addr)
@@ -48,6 +52,9 @@ func StartServer(addr string, pool *redis.Pool, conn redis.Conn) error {
 func HandleLiveConnection(pool *redis.Pool, psconn redis.Conn) http.HandlerFunc {
 	var upgrader = websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
+
+			// This looks wrong, but the origin is checked in the middleware (which
+			// happens before this handler) and therefore we should just skip this.
 			return true
 		},
 	} // use default options
@@ -82,8 +89,6 @@ func HandleLiveConnection(pool *redis.Pool, psconn redis.Conn) http.HandlerFunc 
 						delete(clients, con)
 						continue
 					}
-
-					logrus.Debugf("CML: Sent message")
 				}
 
 			case con := <-closingClients:
