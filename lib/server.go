@@ -11,6 +11,9 @@ import (
 	"strconv"
 	"time"
 
+	// Import pprof so we can measure runtime performance.
+	_ "net/http/pprof"
+
 	"github.com/Sirupsen/logrus"
 	"github.com/disintegration/imaging"
 	"github.com/garyburd/redigo/redis"

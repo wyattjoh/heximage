@@ -2,14 +2,19 @@ package main
 
 import (
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 
 	heximage "github.com/wyattjoh/heximage/lib"
 )
 
 func main() {
+
+	// Load the templates.
+	tmpl := template.Must(template.ParseFiles(filepath.Join("example", "index.html")))
 
 	// Create the redis pool, assuming a default here.
 	pool, err := heximage.ConnectRedis("redis://localhost:6379", 0)
@@ -23,12 +28,16 @@ func main() {
 	conn := pool.Get()
 	defer conn.Close()
 
+	const heximageBind = "localhost:8080"
+
 	// Start the heximage server.
-	go heximage.StartServer("localhost:8080", pool, conn, []string{"http://localhost:8000"})
+	go heximage.StartServer(heximageBind, pool, conn, []string{"http://localhost:8000"})
 
 	// Prepare to serve the index.html file from the example directory.
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "example/index.html")
+		tmpl.Execute(w, map[string]interface{}{
+			"Origin": heximageBind,
+		})
 	})
 
 	// Start the server.
