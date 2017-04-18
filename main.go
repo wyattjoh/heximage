@@ -8,14 +8,7 @@ import (
 	"github.com/garyburd/redigo/redis"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
-)
-
-const (
-	key        = "heximage"
-	updatesKey = key + ":updates"
-	width      = 50
-	height     = 50
-	bits       = width * height * 4
+	heximage "github.com/wyattjoh/heximage/lib"
 )
 
 func main() {
@@ -47,7 +40,7 @@ func main() {
 		}
 
 		var err error
-		pool, err = ConnectRedis(c.GlobalString("redis-url"), c.GlobalInt("redis-max-clients"))
+		pool, err = heximage.ConnectRedis(c.GlobalString("redis-url"), c.GlobalInt("redis-max-clients"))
 		if err != nil {
 			return cli.NewExitError(errors.Wrap(err, "can't connect to redis"), 1)
 		}
@@ -83,7 +76,7 @@ func main() {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				if err := StartServer(c.String("listen-addr"), pool, conn, c.StringSlice("allowed-cors-origin")); err != nil {
+				if err := heximage.StartServer(c.String("listen-addr"), pool, conn, c.StringSlice("allowed-cors-origin")); err != nil {
 					return cli.NewExitError(errors.Wrap(err, "can't run the server"), 1)
 				}
 
@@ -94,7 +87,7 @@ func main() {
 			Name:  "init",
 			Usage: "initializes the image canvas",
 			Action: func(c *cli.Context) error {
-				if err := InitImage(conn); err != nil {
+				if err := heximage.InitImage(conn); err != nil {
 					return cli.NewExitError(errors.Wrap(err, "can't init the image"), 1)
 				}
 
@@ -110,7 +103,7 @@ func main() {
 				}
 
 				args := c.Args()
-				if err := SetColour(conn, args.Get(0), args.Get(1), args.Get(2)); err != nil {
+				if err := heximage.SetColour(conn, args.Get(0), args.Get(1), args.Get(2)); err != nil {
 					return cli.NewExitError(errors.Wrap(err, "can't set the colour"), 1)
 				}
 
@@ -121,7 +114,7 @@ func main() {
 			Name:  "get",
 			Usage: "gets the image and return's an encoded png to the stdout",
 			Action: func(c *cli.Context) error {
-				img, err := GetImage(conn)
+				img, err := heximage.GetImage(conn)
 				if err != nil {
 					return cli.NewExitError(errors.Wrap(err, "can't get the image"), 1)
 				}
@@ -141,11 +134,11 @@ func main() {
 			Name:  "clear",
 			Usage: "clears the stored image on the canvas and reinitializes it",
 			Action: func(c *cli.Context) error {
-				if err := ClearImage(conn); err != nil {
+				if err := heximage.ClearImage(conn); err != nil {
 					return cli.NewExitError(errors.Wrap(err, "can't clear the image"), 1)
 				}
 
-				if err := InitImage(conn); err != nil {
+				if err := heximage.InitImage(conn); err != nil {
 					return cli.NewExitError(errors.Wrap(err, "can't init the image"), 1)
 				}
 
@@ -156,7 +149,7 @@ func main() {
 			Name:  "test",
 			Usage: "prints a test pattern onto the image",
 			Action: func(c *cli.Context) error {
-				if err := TestImage(conn); err != nil {
+				if err := heximage.TestImage(conn); err != nil {
 					return cli.NewExitError(errors.Wrap(err, "can't set the test pattern"), 1)
 				}
 

@@ -1,4 +1,4 @@
-package main
+package heximage
 
 import (
 	"bytes"
@@ -7,7 +7,6 @@ import (
 	"image"
 	"image/png"
 	"io"
-	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -44,7 +43,7 @@ func StartServer(addr string, pool *redis.Pool, conn redis.Conn, corsOrigins []s
 
 	n.UseHandler(mux)
 
-	log.Printf("Now listening on %s", addr)
+	logrus.Debugf("Now listening on %s", addr)
 	return http.ListenAndServe(addr, n)
 }
 
