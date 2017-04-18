@@ -13,6 +13,7 @@ import (
 
 	"github.com/garyburd/redigo/redis"
 	"github.com/pkg/errors"
+	"github.com/urfave/negroni"
 )
 
 const (
@@ -21,8 +22,8 @@ const (
 	timeout = 30 * time.Second
 
 	key    = "heximage"
-	width  = 1000
-	height = 1000
+	width  = 5
+	height = 5
 	bits   = width * height * 4
 )
 
@@ -39,7 +40,7 @@ func SetColour(conn redis.Conn, xs, ys, colours string) error {
 		return errors.Wrap(err, "can't parse y")
 	}
 
-	if x > width || y > height {
+	if x > width || y > height || x == 0 || y == 0 {
 		return errors.New("invalid pixel location supplied")
 	}
 
@@ -147,12 +148,22 @@ func usage() {
 // StartServer runs an http server capable of serving requests for the image
 // service.
 func StartServer(pool *redis.Pool) error {
+	mux := http.NewServeMux()
 
-	http.HandleFunc("/api/place/draw", func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
+	mux.Handle("/api/place/draw", HandleCreatePixel(pool))
+	mux.Handle("/api/place/board-bitmap", HandleGetBoardBitmap(pool))
 
+	n := negroni.Classic() // Includes some default middlewares
+	n.UseHandler(mux)
+
+	log.Printf("Now listening on 127.0.0.1:8080")
+	return http.ListenAndServe("127.0.0.1:8080", n)
+}
+
+// HandleCreatePixel handles creating pixels on the image.
+func HandleCreatePixel(pool *redis.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
-			log.Printf("%s /api/place/draw %d - %s", r.Method, http.StatusMethodNotAllowed, time.Since(start))
 			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 			return
 		}
@@ -164,26 +175,23 @@ func StartServer(pool *redis.Pool) error {
 			X, Y, Colour string
 		}
 		if err := json.NewDecoder(r.Body).Decode(&pl); err != nil {
-			log.Printf("POST /api/place/draw %d - %s", http.StatusBadRequest, time.Since(start))
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
 		}
 
 		if err := SetColour(conn, pl.X, pl.Y, pl.Colour); err != nil {
-			log.Printf("POST /api/place/draw %d - %s", http.StatusInternalServerError, time.Since(start))
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
 		}
 
-		log.Printf("POST /api/place/draw %d - %s", http.StatusOK, time.Since(start))
 		w.WriteHeader(http.StatusCreated)
-	})
+	}
+}
 
-	http.HandleFunc("/api/place/board-bitmap", func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-
+// HandleGetBoardBitmap handles serving the board as a png image.
+func HandleGetBoardBitmap(pool *redis.Pool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {
-			log.Printf("%s /api/place/board-bitmap %d - %s", r.Method, http.StatusMethodNotAllowed, time.Since(start))
 			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 			return
 		}
@@ -193,7 +201,6 @@ func StartServer(pool *redis.Pool) error {
 
 		img, err := GetImage(conn)
 		if err != nil {
-			log.Printf("%s /api/place/board-bitmap %d - %s", r.Method, http.StatusInternalServerError, time.Since(start))
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -207,16 +214,10 @@ func StartServer(pool *redis.Pool) error {
 		}
 
 		if err := enc.Encode(w, img); err != nil {
-			log.Printf("GET /api/place/board-bitmap %d - %s", http.StatusInternalServerError, time.Since(start))
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-
-		log.Printf("GET /api/place/board-bitmap %d - %s", http.StatusOK, time.Since(start))
-	})
-
-	log.Printf("Now listening on 127.0.0.1:8080")
-	return http.ListenAndServe("127.0.0.1:8080", nil)
+	}
 }
 
 func main() {

@@ -19,6 +19,12 @@
 			"path": "github.com/pkg/errors",
 			"revision": "248dadf4e9068a0b3e79f02ed0a610d935de5302",
 			"revisionTime": "2016-10-29T09:36:37Z"
+		},
+		{
+			"checksumSHA1": "ezZyPBDiKHM5y+YmlIhrWIzgbfw=",
+			"path": "github.com/urfave/negroni",
+			"revision": "c0db5feaa33826cd5117930c8f4ee5c0f565eec6",
+			"revisionTime": "2017-02-26T00:53:33Z"
 		}
 	],
 	"rootPath": "github.com/wyattjoh/heximage"
