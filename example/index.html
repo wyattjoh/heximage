@@ -166,7 +166,7 @@
       }
 
       // Create WebSocket connection.
-      var socket = new ReconnectingWebSocket('ws:' + SERVER_ADDR + '/api/place/live');
+      var socket = new ReconnectingWebSocket((window.location.protocol == 'https:' ? 'wss:' : 'ws:') + SERVER_ADDR + '/api/place/live');
 
       // Connection opened
       socket.addEventListener('open', function (event) {
@@ -206,12 +206,42 @@
 
         // This is a new colour! Draw it locally and push it up the websocket.
         drawPixel(x, y, PALATE);
-        socket.send(JSON.stringify({
+        queue.push(JSON.stringify({
           X: '' + x,
           Y: '' + y,
           Colour: toHexString(PALATE)
         }));
       }, false);
+
+      var queue = [];
+      setInterval(function() {
+
+        // Check to see if there are items in the queue to send.
+        if (queue.length === 0) {
+          return;
+        }
+
+        // While there are items to send.
+        while (queue.length > 0) {
+
+          // Grab the first item (without removing it).
+          var msg = queue[0];
+
+          try {
+
+            // Try and send it.
+            socket.send(msg);
+          } catch (e) {
+
+            // The send failed, stop trying to send (without removing from the
+            // queue).
+            return;
+          }
+
+          // The message sent! Remove the message from the queue.
+          queue.shift();
+        }
+      }, 500);
 
       loadBitmap();
 
