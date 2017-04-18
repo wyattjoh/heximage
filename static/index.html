@@ -55,49 +55,56 @@
     </div>
     <input id="colour" type="text" />
     <script type="application/javascript">
-      const width = 50, height = 50;
+      'use strict';
 
-      let palateEl = document.getElementById('colour');
-      let containerEl = document.getElementById('container');
-      let cameraEl = document.getElementById('camera');
-      let el = document.getElementById('canvas');
-      let ctx = el.getContext('2d');
+      var SERVER_ADDR = '//127.0.0.1:8080';
+
+      var width = 50,
+          height = 50;
+
+      var palateEl = document.getElementById('colour');
+      var containerEl = document.getElementById('container');
+      var cameraEl = document.getElementById('camera');
+      var el = document.getElementById('canvas');
+      var ctx = el.getContext('2d');
       ctx.mozImageSmoothingEnabled = false;
       ctx.webkitImageSmoothingEnabled = false;
       ctx.msImageSmoothingEnabled = false;
       ctx.imageSmoothingEnabled = false;
 
-      let buffer = new ArrayBuffer(width * height * 4);
-      let array = new Uint8ClampedArray(buffer);
+      var buffer = new ArrayBuffer(width * height * 4);
+      var array = new Uint8ClampedArray(buffer);
 
       function updateDisplay() {
-        let e = new ImageData(array, width, height);
+        var e = new ImageData(array, width, height);
         ctx.putImageData(e, 0, 0);
       }
 
-       function loadBitmap() {
-        fetch('http://localhost:8080/api/place/board-bitmap')
-          .then((res) => res.arrayBuffer())
-          .then((data) => {
-            buffer = data;
-            array = new Uint8ClampedArray(buffer);
+      function loadBitmap() {
+        fetch(SERVER_ADDR + '/api/place/board-bitmap').then(function (res) {
+          return res.arrayBuffer();
+        }).then(function (data) {
+          buffer = data;
+          array = new Uint8ClampedArray(buffer);
 
-            updateDisplay();
-          });
+          updateDisplay();
+        });
       }
 
-      let zoom = 4, panX = 0, panY = 0;
+      var zoom = 4,
+          panX = 0,
+          panY = 0;
 
       function getCoordinatesFromEvent(e) {
-        let r = {
+        var r = {
           x: parseInt(e.clientX, 10) + window.scrollX,
           y: parseInt(e.clientY, 10) + window.scrollY
         };
 
-        let s = e.currentTarget ? e.currentTarget.offsetLeft : 0,
+        var s = e.currentTarget ? e.currentTarget.offsetLeft : 0,
             o = e.currentTarget ? e.currentTarget.offsetTop : 0;
 
-        let c = containerEl.getBoundingClientRect();
+        var c = containerEl.getBoundingClientRect();
         return {
           x: Math.round((r.x - s) / zoom + width / 2 - c.width / (2 * zoom) - panX),
           y: Math.round((r.y - o) / zoom + height / 2 - c.height / (2 * zoom) - panY)
@@ -105,9 +112,9 @@
       }
 
       function toHexString(byteArray) {
-        return byteArray.map(function(byte) {
+        return byteArray.map(function (byte) {
           return ('0' + (byte & 0xFF).toString(16)).slice(-2);
-        }).join('')
+        }).join('');
       }
 
       function parseHexString(str) {
@@ -121,50 +128,52 @@
         return result;
       }
 
-      let pickingColour = false;
-      let PALATE = [0x00, 0x00, 0x00, 0xff];
+      var pickingColour = false;
+      var PALATE = [0x00, 0x00, 0x00, 0xff];
       $(palateEl).spectrum({
-        show: () => {
+        show: function show() {
           pickingColour = true;
         },
-        hide: () => {
+        hide: function hide() {
           pickingColour = false;
         },
-        change: (colour) => {
-          let {r, g, b, a} = colour.toRgb();
+        change: function change(colour) {
+          var _colour$toRgb = colour.toRgb(),
+              r = _colour$toRgb.r,
+              g = _colour$toRgb.g,
+              b = _colour$toRgb.b,
+              a = _colour$toRgb.a;
 
           PALATE[0] = r;
           PALATE[1] = g;
           PALATE[2] = b;
           PALATE[3] = Math.round(a * 0xff);
-
-          console.log({r,g,b,a}, PALATE);
         }
       });
 
-      cameraEl.addEventListener('contextmenu', (e) => {
+      cameraEl.addEventListener('contextmenu', function (e) {
         e.preventDefault();
       });
 
       function getOffset(x, y) {
-        return (width*(y-1) + (x-1)) * 4;
+        return (width * (y - 1) + (x - 1)) * 4;
       }
 
       function drawPixel(x, y, colour) {
-        const offset = getOffset(x, y)
+        var offset = getOffset(x, y);
         array.set(colour, offset);
         updateDisplay();
       }
 
       // Create WebSocket connection.
-      const socket = new ReconnectingWebSocket('ws://localhost:8080/api/place/live');
+      var socket = new ReconnectingWebSocket('ws:' + SERVER_ADDR + '/api/place/live');
 
       // Connection opened
-      socket.addEventListener('open', (event) => {
+      socket.addEventListener('open', function (event) {
         // TODO: enable editing now that we've opened the websocket connection.
       });
 
-      cameraEl.addEventListener('mouseup', (e) => {
+      cameraEl.addEventListener('mouseup', function (e) {
 
         // If we're picking a colour, don't draw anything.
         if (pickingColour) {
@@ -176,24 +185,30 @@
           return;
         }
 
-        const {x, y} = getCoordinatesFromEvent(e);
+        var _getCoordinatesFromEv = getCoordinatesFromEvent(e),
+            x = _getCoordinatesFromEv.x,
+            y = _getCoordinatesFromEv.y;
 
         // Compute th eoffset in the array.
-        const offset = getOffset(x, y);
+
+
+        var offset = getOffset(x, y);
 
         // Get the current colour.
-        const colour = array.slice(offset, offset + 4);
+        var colour = array.slice(offset, offset + 4);
 
         // If the current colour is already there, don't bother writing it...
-        if (colour.length === PALATE.length && colour.every((v, i) => v === PALATE[i])) {
+        if (colour.length === PALATE.length && colour.every(function (v, i) {
+          return v === PALATE[i];
+        })) {
           return;
         }
 
         // This is a new colour! Draw it locally and push it up the websocket.
         drawPixel(x, y, PALATE);
         socket.send(JSON.stringify({
-          X: `${x}`,
-          Y: `${y}`,
+          X: '' + x,
+          Y: '' + y,
           Colour: toHexString(PALATE)
         }));
       }, false);
@@ -201,8 +216,11 @@
       loadBitmap();
 
       // Listen for messages
-      socket.addEventListener('message', (event) => {
-        const {X, Y, Colour} = JSON.parse(event.data);
+      socket.addEventListener('message', function (event) {
+        var _JSON$parse = JSON.parse(event.data),
+            X = _JSON$parse.X,
+            Y = _JSON$parse.Y,
+            Colour = _JSON$parse.Colour;
 
         drawPixel(X, Y, parseHexString(Colour));
       });
