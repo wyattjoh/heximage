@@ -26,6 +26,8 @@ OPTIONS:
    --allowed-cors-origin value  allow one or many origins to access the api
 ```
 
+For an example of the application in action, visit the `example` directory.
+
 ## License
 
 MIT
