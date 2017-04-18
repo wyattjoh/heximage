@@ -115,7 +115,7 @@ func HandleLiveConnection(pool *redis.Pool, psconn redis.Conn) http.HandlerFunc 
 
 			case error:
 
-				// An error was encoutnered while managing the pubsub connection.
+				// An error was encountered while managing the pubsub connection.
 				logrus.Debugf("RD: Error: %s", n.Error())
 				return
 			}
