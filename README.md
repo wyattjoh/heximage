@@ -11,7 +11,7 @@ modified using it's [BITFIELD](https://redis.io/commands/bitfield) command.
 ## Endpoints
 
 - `GET /api/place/live`: websocket api
-- `POST /api/place/draw`:  post json with content `{"X": "1", "Y": "1", "Colour": "FFFFFFFF"} to set a pixel's colour
+- `POST /api/place/draw`:  post json with content `{"X": "1", "Y": "1", "Colour": "FFFFFFFF"}` to set a pixel's colour
 - `GET /api/place/board-bitmap`: get the bit repr of the image in raw bytes
 - `GET /api/place/board?w=`: get the png repr of the image, optional `w` allows you to set any width for the image to be resized to
 
