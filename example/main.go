@@ -38,7 +38,7 @@ func main() {
 	// Start the heximage server.
 	go func() {
 		log.Printf("Now serving the api on %s", apiBind)
-		if err := heximage.StartServer(apiBind, pool, conn, []string{temBind}); err != nil {
+		if err := heximage.StartServer(apiBind, pool, conn, []string{"http://" + temBind}); err != nil {
 			fmt.Println("Can't serve the api server", err)
 			os.Exit(1)
 		}
