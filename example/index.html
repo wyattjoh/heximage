@@ -143,7 +143,6 @@
       }
 
       function drawPixel(x, y, colour) {
-        console.log(x, y, colour);
         var offset = getOffset(x, y);
         array.set(colour, offset);
         updateDisplay();
