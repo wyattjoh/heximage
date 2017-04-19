@@ -1,7 +1,9 @@
 package heximage
 
 import (
+	"encoding/json"
 	"image"
+	"strconv"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/garyburd/redigo/redis"
@@ -95,6 +97,76 @@ func TestImage(conn redis.Conn) error {
 				return err
 			}
 		}
+	}
+
+	if err := conn.Flush(); err != nil {
+		return err
+	}
+
+	logrus.WithField("query", "redis").Debugf("FLUSH")
+
+	return nil
+}
+
+// Pixel represents a given point and it's colour.
+type Pixel struct {
+	X      uint32
+	Y      uint32
+	Colour uint32
+}
+
+// PublishPixel publishes the pixel as it was created to redis by sending the
+// redis command for PUBLISH, it does not flush the command.
+func PublishPixel(conn redis.Conn, px Pixel) error {
+	message, err := json.Marshal(px)
+	if err != nil {
+		return err
+	}
+
+	if err := conn.Send("PUBLISH", updatesKey, string(message)); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ParsePixel parses pixel data from strings.
+func ParsePixel(xs, ys, colours string) (*Pixel, error) {
+	x, err := strconv.ParseUint(xs, 10, 32)
+	if err != nil {
+		return nil, errors.Wrap(err, "can't parse x")
+	}
+
+	y, err := strconv.ParseUint(ys, 10, 32)
+	if err != nil {
+		return nil, errors.Wrap(err, "can't parse y")
+	}
+
+	colour, err := strconv.ParseUint(colours, 16, 32)
+	if err != nil {
+		return nil, errors.Wrap(err, "can't parse color")
+	}
+
+	return &Pixel{
+		X:      uint32(x),
+		Y:      uint32(y),
+		Colour: uint32(colour),
+	}, nil
+}
+
+// SetColour sets the colour on a pixel of the image.
+func SetColour(conn redis.Conn, px Pixel) error {
+
+	if px.X > width || px.Y > height || px.X == 0 || px.Y == 0 {
+		return errors.New("invalid pixel location supplied")
+	}
+
+	if err := SendSet(conn, px.X, px.Y, px.Colour); err != nil {
+		return err
+	}
+
+	if err := PublishPixel(conn, px); err != nil {
+		return err
 	}
 
 	if err := conn.Flush(); err != nil {

@@ -103,7 +103,13 @@ func main() {
 				}
 
 				args := c.Args()
-				if err := heximage.SetColour(conn, args.Get(0), args.Get(1), args.Get(2)); err != nil {
+
+				px, err := heximage.ParsePixel(args.Get(0), args.Get(1), args.Get(2))
+				if err != nil {
+					return cli.NewExitError(errors.Wrap(err, "can't parse the pixel"), 1)
+				}
+
+				if err := heximage.SetColour(conn, *px); err != nil {
 					return cli.NewExitError(errors.Wrap(err, "can't set the colour"), 1)
 				}
 

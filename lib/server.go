@@ -148,23 +148,15 @@ func HandleLiveConnection(pool *redis.Pool, psconn redis.Conn) http.HandlerFunc 
 
 			var buf = bytes.NewBuffer(message)
 
-			var pl struct {
-				X, Y, Colour string
-			}
-			if err := json.NewDecoder(buf).Decode(&pl); err != nil {
+			var px Pixel
+			if err := json.NewDecoder(buf).Decode(&px); err != nil {
 				logrus.Debugf("WS: Error: %s", err.Error())
 				continue
 			}
 
 			conn := pool.Get()
 
-			if err := SetColour(conn, pl.X, pl.Y, pl.Colour); err != nil {
-				logrus.Debugf("WS: Error: %s", err.Error())
-				conn.Close()
-				continue
-			}
-
-			if _, err := conn.Do("PUBLISH", updatesKey, string(message)); err != nil {
+			if err := SetColour(conn, px); err != nil {
 				logrus.Debugf("WS: Error: %s", err.Error())
 				conn.Close()
 				continue
@@ -186,15 +178,13 @@ func HandleCreatePixel(pool *redis.Pool) http.HandlerFunc {
 		conn := pool.Get()
 		defer conn.Close()
 
-		var pl struct {
-			X, Y, Colour string
-		}
-		if err := json.NewDecoder(r.Body).Decode(&pl); err != nil {
+		var px Pixel
+		if err := json.NewDecoder(r.Body).Decode(&px); err != nil {
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
 		}
 
-		if err := SetColour(conn, pl.X, pl.Y, pl.Colour); err != nil {
+		if err := SetColour(conn, px); err != nil {
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
 		}

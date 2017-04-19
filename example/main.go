@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/Sirupsen/logrus"
 	heximage "github.com/wyattjoh/heximage/lib"
 )
 
@@ -19,6 +20,8 @@ const (
 )
 
 func main() {
+
+	logrus.SetLevel(logrus.DebugLevel)
 
 	// Load the templates.
 	tmpl := template.Must(template.ParseFiles(filepath.Join("example", "index.html")))

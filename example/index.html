@@ -111,23 +111,6 @@
         };
       }
 
-      function toHexString(byteArray) {
-        return byteArray.map(function (byte) {
-          return ('0' + (byte & 0xFF).toString(16)).slice(-2);
-        }).join('');
-      }
-
-      function parseHexString(str) {
-        var result = [];
-        while (str.length >= 2) {
-          result.push(parseInt(str.substring(0, 2), 16));
-
-          str = str.substring(2, str.length);
-        }
-
-        return result;
-      }
-
       var pickingColour = false;
       var PALATE = [0x00, 0x00, 0x00, 0xff];
       $(palateEl).spectrum({
@@ -160,6 +143,7 @@
       }
 
       function drawPixel(x, y, colour) {
+        console.log(x, y, colour);
         var offset = getOffset(x, y);
         array.set(colour, offset);
         updateDisplay();
@@ -204,12 +188,14 @@
           return;
         }
 
+        var colour = new DataView(new Uint8Array(PALATE).buffer).getUint32();
+
         // This is a new colour! Draw it locally and push it up the websocket.
         drawPixel(x, y, PALATE);
         queue.push(JSON.stringify({
-          X: '' + x,
-          Y: '' + y,
-          Colour: toHexString(PALATE)
+          X: x,
+          Y: y,
+          Colour: colour
         }));
       }, false);
 
@@ -252,7 +238,16 @@
             Y = _JSON$parse.Y,
             Colour = _JSON$parse.Colour;
 
-        drawPixel(X, Y, parseHexString(Colour));
+        var arr = new ArrayBuffer(4); // an Int32 takes 4 bytes
+        var view = new DataView(arr);
+        view.setUint32(0, Colour, false); // byteOffset = 0; litteEndian = false
+
+        drawPixel(X, Y, [
+          view.getUint8(0),
+          view.getUint8(1),
+          view.getUint8(2),
+          view.getUint8(3)
+        ]);
       });
     </script>
   </body>
