@@ -14,11 +14,11 @@ import (
 	// Import pprof so we can measure runtime performance.
 	_ "net/http/pprof"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/disintegration/imaging"
 	"github.com/garyburd/redigo/redis"
 	"github.com/gorilla/websocket"
 	"github.com/rs/cors"
+	log "github.com/sirupsen/logrus"
 	"github.com/urfave/negroni"
 )
 
@@ -46,7 +46,7 @@ func StartServer(addr string, pool *redis.Pool, conn redis.Conn, corsOrigins []s
 
 	n.UseHandler(mux)
 
-	logrus.Debugf("Now listening on %s", addr)
+	log.Debugf("Now listening on %s", addr)
 	return http.ListenAndServe(addr, n)
 }
 
@@ -79,15 +79,15 @@ func HandleLiveConnection(pool *redis.Pool, psconn redis.Conn) http.HandlerFunc 
 			select {
 			case con := <-newClients:
 
-				logrus.Debugf("CML: A new client has connected")
+				log.Debugf("CML: A new client has connected")
 				clients[con] = true
 
 			case msg := <-messages:
 
-				logrus.Debugf("CML: A new message needs to be sent")
+				log.Debugf("CML: A new message needs to be sent")
 				for con := range clients {
 					if err := con.WriteMessage(websocket.TextMessage, msg); err != nil {
-						logrus.Debugf("CML: Writing to a client failed: %s", err.Error())
+						log.Debugf("CML: Writing to a client failed: %s", err.Error())
 						delete(clients, con)
 						continue
 					}
@@ -95,7 +95,7 @@ func HandleLiveConnection(pool *redis.Pool, psconn redis.Conn) http.HandlerFunc 
 
 			case con := <-closingClients:
 
-				logrus.Debugf("CML: A client has disconnected.")
+				log.Debugf("CML: A client has disconnected.")
 				delete(clients, con)
 
 			}
@@ -109,17 +109,17 @@ func HandleLiveConnection(pool *redis.Pool, psconn redis.Conn) http.HandlerFunc 
 			case redis.Message:
 
 				// A new message from Redis, send it to all connected clients.
-				logrus.Debugf("RD: New Message: %s", string(n.Data))
+				log.Debugf("RD: New Message: %s", string(n.Data))
 				messages <- n.Data
 
 			case redis.Subscription:
 
-				logrus.Debugf("RD: Subscription: %d", n.Count)
+				log.Debugf("RD: Subscription: %d", n.Count)
 
 			case error:
 
 				// An error was encountered while managing the pubsub connection.
-				logrus.Debugf("RD: Error: %s", n.Error())
+				log.Debugf("RD: Error: %s", n.Error())
 				return
 			}
 		}
@@ -144,20 +144,20 @@ func HandleLiveConnection(pool *redis.Pool, psconn redis.Conn) http.HandlerFunc 
 				break
 			}
 
-			logrus.Debugf("WS: New Message: %s", string(message))
+			log.Debugf("WS: New Message: %s", string(message))
 
 			var buf = bytes.NewBuffer(message)
 
 			var px Pixel
 			if err := json.NewDecoder(buf).Decode(&px); err != nil {
-				logrus.Debugf("WS: Error: %s", err.Error())
+				log.Debugf("WS: Error: %s", err.Error())
 				continue
 			}
 
 			conn := pool.Get()
 
 			if err := SetColour(conn, px); err != nil {
-				logrus.Debugf("WS: Error: %s", err.Error())
+				log.Debugf("WS: Error: %s", err.Error())
 				conn.Close()
 				continue
 			}

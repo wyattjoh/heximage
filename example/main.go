@@ -3,12 +3,11 @@ package main
 import (
 	"fmt"
 	"html/template"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 
-	"github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	heximage "github.com/wyattjoh/heximage/lib"
 )
 
@@ -21,7 +20,7 @@ const (
 
 func main() {
 
-	logrus.SetLevel(logrus.DebugLevel)
+	log.SetLevel(log.DebugLevel)
 
 	// Load the templates.
 	tmpl := template.Must(template.ParseFiles(filepath.Join("example", "index.html")))

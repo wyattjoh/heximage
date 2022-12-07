@@ -4,9 +4,9 @@ import (
 	"image/png"
 	"os"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/garyburd/redigo/redis"
 	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 	"github.com/urfave/cli"
 	heximage "github.com/wyattjoh/heximage/lib"
 )
@@ -36,7 +36,7 @@ func main() {
 	}
 	app.Before = func(c *cli.Context) error {
 		if c.GlobalBool("debug") {
-			logrus.SetLevel(logrus.DebugLevel)
+			log.SetLevel(log.DebugLevel)
 		}
 
 		var err error

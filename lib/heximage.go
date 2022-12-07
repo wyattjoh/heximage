@@ -5,9 +5,9 @@ import (
 	"image"
 	"strconv"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/garyburd/redigo/redis"
 	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -23,7 +23,7 @@ func SendSet(conn redis.Conn, x, y, colour uint32) error {
 
 	offset := (width*(y-1) + (x - 1)) * 32
 
-	logrus.WithField("query", "redis").Debugf("BITFIELD %s SET u32 %d %d", key, offset, colour)
+	log.WithField("query", "redis").Debugf("BITFIELD %s SET u32 %d %d", key, offset, colour)
 	return conn.Send("BITFIELD", key, "SET", "u32", offset, colour)
 }
 
@@ -34,7 +34,7 @@ func GetImage(conn redis.Conn) (image.Image, error) {
 		return nil, errors.Wrap(err, "can't get the image bytes")
 	}
 
-	logrus.WithField("query", "redis").Debugf("GET %s", key)
+	log.WithField("query", "redis").Debugf("GET %s", key)
 
 	if len(data) != bits {
 		newData := make([]uint8, bits)
@@ -56,7 +56,7 @@ func ClearImage(conn redis.Conn) error {
 		return errors.Wrap(err, "can't execute the del command")
 	}
 
-	logrus.WithField("query", "redis").Debugf("DEL %s", key)
+	log.WithField("query", "redis").Debugf("DEL %s", key)
 
 	return nil
 }
@@ -67,7 +67,7 @@ func InitImage(conn redis.Conn) error {
 		return errors.Wrap(err, "can't execute the del command")
 	}
 
-	logrus.WithField("query", "redis").Debugf("DEL %s", key)
+	log.WithField("query", "redis").Debugf("DEL %s", key)
 
 	if err := SendSet(conn, width, height, 0); err != nil {
 		return err
@@ -77,7 +77,7 @@ func InitImage(conn redis.Conn) error {
 		return err
 	}
 
-	logrus.WithField("query", "redis").Debugf("FLUSH")
+	log.WithField("query", "redis").Debugf("FLUSH")
 
 	return nil
 }
@@ -103,7 +103,7 @@ func TestImage(conn redis.Conn) error {
 		return err
 	}
 
-	logrus.WithField("query", "redis").Debugf("FLUSH")
+	log.WithField("query", "redis").Debugf("FLUSH")
 
 	return nil
 }
@@ -173,7 +173,7 @@ func SetColour(conn redis.Conn, px Pixel) error {
 		return err
 	}
 
-	logrus.WithField("query", "redis").Debugf("FLUSH")
+	log.WithField("query", "redis").Debugf("FLUSH")
 
 	return nil
 }

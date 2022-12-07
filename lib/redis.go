@@ -4,9 +4,9 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/garyburd/redigo/redis"
 	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 )
 
 // ConnectRedis connects to the redis instance, pings it, and returns the pool
@@ -37,7 +37,7 @@ func ConnectRedis(dsn string, maxActive int) (*redis.Pool, error) {
 						return nil, errors.Wrap(err, "can't auth to the redis server")
 					}
 
-					logrus.WithField("query", "redis").Debugf("AUTH <redacted>")
+					log.WithField("query", "redis").Debugf("AUTH <redacted>")
 				}
 			}
 			return c, err
@@ -53,7 +53,7 @@ func ConnectRedis(dsn string, maxActive int) (*redis.Pool, error) {
 				return errors.Wrap(err, "can't ping redis server after timeout exhausted")
 			}
 
-			logrus.WithField("query", "redis").Debugf("PING")
+			log.WithField("query", "redis").Debugf("PING")
 
 			return nil
 		},
@@ -68,7 +68,7 @@ func ConnectRedis(dsn string, maxActive int) (*redis.Pool, error) {
 		return nil, errors.Wrap(err, "can't ping the redis server for the first time")
 	}
 
-	logrus.WithField("query", "redis").Debugf("PING")
+	log.WithField("query", "redis").Debugf("PING")
 
 	return &pool, nil
 }
